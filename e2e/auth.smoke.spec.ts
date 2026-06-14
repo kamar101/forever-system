@@ -23,7 +23,7 @@ test("sign up → empty dashboard → sign out → sign in", async ({ page }) =>
   await expect(page).toHaveURL(/\/dashboard/);
   await expect(page.getByRole("heading", { name: "Your Day" })).toBeVisible();
   await expect(page.getByText(email)).toBeVisible();
-  await expect(page.getByText("Nothing here yet.")).toBeVisible();
+  await expect(page.getByText("Your Vault is empty.")).toBeVisible();
 
   // Sign out → back to sign-in.
   await page.getByRole("button", { name: "Sign out" }).click();
@@ -34,5 +34,5 @@ test("sign up → empty dashboard → sign out → sign in", async ({ page }) =>
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/dashboard/);
-  await expect(page.getByText("Nothing here yet.")).toBeVisible();
+  await expect(page.getByText("Your Vault is empty.")).toBeVisible();
 });

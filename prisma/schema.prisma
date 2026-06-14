@@ -1,5 +1,6 @@
 // Forever System — Prisma schema.
-// Slice 0 establishes only the User. Later slices add Vault/Goal/Task/Gear/etc.
+// Slice 0 establishes the User. Slice 1 adds the Goal (held in the Vault).
+// Later slices add Task/Gear/Playbook/Assignment/etc.
 
 generator client {
   provider = "prisma-client-js"
@@ -17,4 +18,25 @@ model User {
   name         String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  goals        Goal[]
+}
+
+// A Goal is a single long-term pursuit. It lives dormant in the Vault (status
+// `vault`) until activated (status `active`); activation arrives in a later
+// slice. See CONTEXT.md.
+enum GoalStatus {
+  vault
+  active
+}
+
+model Goal {
+  id        String     @id @default(cuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  status    GoalStatus @default(vault)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([userId])
 }

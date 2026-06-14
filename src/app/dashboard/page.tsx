@@ -1,12 +1,20 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
 import { signOutAction } from "../(auth)/actions";
+import { GoalForm } from "./goal-form";
 
 export default async function DashboardPage() {
   const session = await auth();
   // Middleware already guards this route; this is defense-in-depth and gives us
   // the typed session for scoping.
   if (!session?.user) redirect("/sign-in");
+
+  // The Vault is this user's dormant Goals, newest first.
+  const vaultGoals = await prisma.goal.findMany({
+    where: { userId: session.user.id, status: "vault" },
+    orderBy: { createdAt: "desc" },
+  });
 
   return (
     <main className="dashboard">
@@ -22,12 +30,22 @@ export default async function DashboardPage() {
         </form>
       </header>
 
-      <section className="empty-state">
-        <p>Nothing here yet.</p>
-        <p className="muted">
-          Your Vault is empty. Goals, Tasks, and your daily Assignment will show
-          up here as you build the system out.
-        </p>
+      <section className="vault">
+        <h2>Vault</h2>
+        <GoalForm />
+        {vaultGoals.length === 0 ? (
+          <p className="muted">
+            Your Vault is empty. Add a Goal to get started.
+          </p>
+        ) : (
+          <ul className="goal-list">
+            {vaultGoals.map((goal) => (
+              <li key={goal.id} className="goal-item">
+                {goal.title}
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </main>
   );
