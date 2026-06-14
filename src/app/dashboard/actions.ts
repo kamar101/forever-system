@@ -9,6 +9,7 @@ import {
   taskDescriptionSchema,
   taskGearSchema,
 } from "@/lib/validation";
+import { canActivateGoal, MAX_ACTIVE_GOALS } from "@/domain/goal";
 
 // Shared shape for form-bound server actions driven by useActionState.
 export type FormState = { error: string } | { ok: true } | undefined;
@@ -142,6 +143,116 @@ export async function deleteTaskAction(formData: FormData): Promise<void> {
   await prisma.task.deleteMany({
     where: { id: taskId, goal: { userId } },
   });
+
+  revalidatePath("/dashboard");
+}
+
+// Activate a Goal: move it from the Vault to Active Goals, assigning the next
+// available rank. Blocked if the Goal lacks a Gear-1 Task or the cap is reached.
+export async function activateGoalAction(formData: FormData): Promise<void> {
+  const userId = await currentUserId();
+  if (!userId) return;
+
+  const goalId = formData.get("goalId");
+  if (typeof goalId !== "string" || goalId === "") return;
+
+  const goal = await prisma.goal.findFirst({
+    where: { id: goalId, userId, status: "vault" },
+    include: { tasks: { select: { gear: true } } },
+  });
+  if (!goal) return;
+  if (!canActivateGoal(goal)) return;
+
+  const activeCount = await prisma.goal.count({ where: { userId, status: "active" } });
+  if (activeCount >= MAX_ACTIVE_GOALS) return;
+
+  await prisma.goal.update({
+    where: { id: goalId },
+    data: { status: "active", rank: activeCount + 1 },
+  });
+
+  revalidatePath("/dashboard");
+}
+
+// Deactivate a Goal: move it back to the Vault and compact the remaining ranks.
+export async function deactivateGoalAction(formData: FormData): Promise<void> {
+  const userId = await currentUserId();
+  if (!userId) return;
+
+  const goalId = formData.get("goalId");
+  if (typeof goalId !== "string" || goalId === "") return;
+
+  const goal = await prisma.goal.findFirst({
+    where: { id: goalId, userId, status: "active" },
+    select: { id: true, rank: true },
+  });
+  if (!goal || goal.rank === null) return;
+
+  const vacatedRank = goal.rank;
+
+  await prisma.$transaction([
+    prisma.goal.update({ where: { id: goalId }, data: { status: "vault", rank: null } }),
+    prisma.goal.updateMany({
+      where: { userId, status: "active", rank: { gt: vacatedRank } },
+      data: { rank: { decrement: 1 } },
+    }),
+  ]);
+
+  revalidatePath("/dashboard");
+}
+
+// Swap this Active Goal's rank with the one ranked immediately above it.
+export async function moveGoalRankUpAction(formData: FormData): Promise<void> {
+  const userId = await currentUserId();
+  if (!userId) return;
+
+  const goalId = formData.get("goalId");
+  if (typeof goalId !== "string" || goalId === "") return;
+
+  const goal = await prisma.goal.findFirst({
+    where: { id: goalId, userId, status: "active" },
+    select: { id: true, rank: true },
+  });
+  if (!goal || goal.rank === null || goal.rank <= 1) return;
+
+  const above = await prisma.goal.findFirst({
+    where: { userId, status: "active", rank: goal.rank - 1 },
+    select: { id: true },
+  });
+  if (!above) return;
+
+  await prisma.$transaction([
+    prisma.goal.update({ where: { id: goalId }, data: { rank: goal.rank - 1 } }),
+    prisma.goal.update({ where: { id: above.id }, data: { rank: goal.rank } }),
+  ]);
+
+  revalidatePath("/dashboard");
+}
+
+// Swap this Active Goal's rank with the one ranked immediately below it.
+export async function moveGoalRankDownAction(formData: FormData): Promise<void> {
+  const userId = await currentUserId();
+  if (!userId) return;
+
+  const goalId = formData.get("goalId");
+  if (typeof goalId !== "string" || goalId === "") return;
+
+  const goal = await prisma.goal.findFirst({
+    where: { id: goalId, userId, status: "active" },
+    select: { id: true, rank: true },
+  });
+  if (!goal || goal.rank === null) return;
+
+  const below = await prisma.goal.findFirst({
+    where: { userId, status: "active", rank: goal.rank + 1 },
+    select: { id: true },
+  });
+  if (!below) return;
+
+  await prisma.$transaction([
+    prisma.goal.update({ where: { id: goalId }, data: { rank: goal.rank + 1 } }),
+    prisma.goal.update({ where: { id: below.id }, data: { rank: goal.rank } }),
+  ]);
 
   revalidatePath("/dashboard");
 }
