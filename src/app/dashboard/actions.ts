@@ -8,8 +8,10 @@ import {
   taskSchema,
   taskDescriptionSchema,
   taskGearSchema,
+  pulseSchema,
 } from "@/lib/validation";
 import { canActivateGoal, MAX_ACTIVE_GOALS } from "@/domain/goal";
+import { composeAssignment } from "@/domain/assignment";
 
 // Shared shape for form-bound server actions driven by useActionState.
 export type FormState = { error: string } | { ok: true } | undefined;
@@ -227,6 +229,63 @@ export async function moveGoalRankUpAction(formData: FormData): Promise<void> {
   ]);
 
   revalidatePath("/dashboard");
+}
+
+// Take a Pulse: user declares their Capacity, system composes and persists a
+// snapshotted Assignment for today. At most one Pulse per calendar Day (UTC).
+// Re-Pulsing replaces the existing Assignment for the Day.
+export async function takePulseAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const userId = await currentUserId();
+  if (!userId) return { error: "You must be signed in." };
+
+  const parsed = pulseSchema.safeParse({ capacity: formData.get("capacity") });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid Capacity." };
+  }
+  const { capacity } = parsed.data;
+
+  // Fetch active goals ordered by rank, including their tasks.
+  const activeGoals = await prisma.goal.findMany({
+    where: { userId, status: "active" },
+    orderBy: { rank: "asc" },
+    include: { tasks: { select: { description: true, gear: true }, orderBy: { createdAt: "asc" } } },
+  });
+
+  const items = composeAssignment(capacity, activeGoals);
+
+  // Today's date (UTC date only — timezone is acceptable for MVP).
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+
+  // Upsert the Pulse for today, then replace its Assignment (ADR-0004).
+  await prisma.$transaction(async (tx) => {
+    // Delete an existing Pulse (and cascaded Assignment/items) for today if any.
+    await tx.pulse.deleteMany({ where: { userId, date: today } });
+
+    const pulse = await tx.pulse.create({
+      data: { userId, capacity, date: today },
+    });
+
+    await tx.assignment.create({
+      data: {
+        pulseId: pulse.id,
+        items: {
+          create: items.map((item) => ({
+            goalId: item.goalId,
+            taskDescription: item.taskDescription,
+            gear: item.gear,
+            completed: false,
+          })),
+        },
+      },
+    });
+  });
+
+  revalidatePath("/dashboard");
+  return { ok: true };
 }
 
 // Swap this Active Goal's rank with the one ranked immediately below it.

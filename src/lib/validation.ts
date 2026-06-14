@@ -39,3 +39,9 @@ export const taskDescriptionSchema = taskSchema.pick({ description: true });
 
 // Changing a Task's Gear on its own (no description change).
 export const taskGearSchema = taskSchema.pick({ gear: true });
+
+export const CAPACITY_VALUES = ["Good", "Average", "Bad", "Worst"] as const;
+
+export const pulseSchema = z.object({
+  capacity: z.enum(CAPACITY_VALUES, { message: "Pick a valid Capacity." }),
+});

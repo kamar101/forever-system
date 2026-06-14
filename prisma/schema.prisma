@@ -1,7 +1,7 @@
 // Forever System — Prisma schema.
 // Slice 0 establishes the User. Slice 1 adds the Goal (held in the Vault).
 // Slice 2 adds the Task (carrying a Gear). Slice 3 adds rank for Active Goals.
-// Later slices add Playbook/Assignment/etc.
+// Slice 4 adds Pulse, Assignment, and AssignmentItem (snapshot of Tasks at Pulse time).
 
 generator client {
   provider = "prisma-client-js"
@@ -20,6 +20,7 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   goals        Goal[]
+  pulses       Pulse[]
 }
 
 // A Goal is a single long-term pursuit. It lives dormant in the Vault (status
@@ -62,3 +63,45 @@ model Task {
 
   @@index([goalId])
 }
+
+// The user's self-reported Capacity for a Day, expressed as Good/Average/Bad/Worst.
+// Stored as a plain string; the domain layer owns the type (see src/domain/capacity.ts).
+// Per ADR-0002: at most one Pulse per Day; the Day settles on the final one.
+model Pulse {
+  id         String     @id @default(cuid())
+  userId     String
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  capacity   String
+  date       DateTime   @db.Date
+  assignment Assignment?
+  createdAt  DateTime   @default(now())
+
+  @@unique([userId, date])
+  @@index([userId])
+}
+
+// An Assignment is the bundle of Tasks produced by a Pulse. It is a frozen
+// snapshot (ADR-0004): editing live Tasks never rewrites past Days.
+model Assignment {
+  id        String           @id @default(cuid())
+  pulseId   String           @unique
+  pulse     Pulse            @relation(fields: [pulseId], references: [id], onDelete: Cascade)
+  items     AssignmentItem[]
+  createdAt DateTime         @default(now())
+}
+
+// A single snapshotted Task within an Assignment. Captures description and Gear
+// as of Pulse time — not a FK to the live Task row. See ADR-0004.
+model AssignmentItem {
+  id              String     @id @default(cuid())
+  assignmentId    String
+  assignment      Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  goalId          String
+  taskDescription String
+  gear            Int
+  completed       Boolean    @default(false)
+  createdAt       DateTime   @default(now())
+
+  @@index([assignmentId])
+}
+

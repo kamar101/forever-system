@@ -6,6 +6,7 @@ import { signOutAction } from "../(auth)/actions";
 import { ActiveGoalCard } from "./active-goal-card";
 import { GoalCard } from "./goal-card";
 import { GoalForm } from "./goal-form";
+import { PulseForm } from "./pulse-form";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -14,6 +15,20 @@ export default async function DashboardPage() {
   if (!session?.user) redirect("/sign-in");
 
   const userId = session.user.id;
+
+  // Today's Assignment (if a Pulse has been taken today).
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const todayPulse = await prisma.pulse.findUnique({
+    where: { userId_date: { userId, date: today } },
+    include: {
+      assignment: {
+        include: {
+          items: { orderBy: { createdAt: "asc" } },
+        },
+      },
+    },
+  });
 
   // Active Goals ordered by priority rank (1 = highest).
   const activeGoals = await prisma.goal.findMany({
@@ -44,6 +59,39 @@ export default async function DashboardPage() {
           </button>
         </form>
       </header>
+
+      <section className="pulse-section" aria-label="Today's Assignment">
+        <h2>Today&apos;s Assignment</h2>
+        {activeGoals.length === 0 ? (
+          <p className="muted">Activate a Goal first to take a Pulse.</p>
+        ) : todayPulse?.assignment ? (
+          <div className="assignment">
+            <p className="muted">
+              Capacity: <strong>{todayPulse.capacity}</strong>
+            </p>
+            {todayPulse.assignment.items.length === 0 ? (
+              <p className="muted">
+                No Tasks at that Gear — re-Pulse or add Tasks.
+              </p>
+            ) : (
+              <ul className="assignment-items">
+                {todayPulse.assignment.items.map((item) => (
+                  <li key={item.id} className="assignment-item">
+                    <span>{item.taskDescription}</span>
+                    <span className="gear-badge">G{item.gear}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <details>
+              <summary className="muted">Re-Pulse</summary>
+              <PulseForm />
+            </details>
+          </div>
+        ) : (
+          <PulseForm />
+        )}
+      </section>
 
       <section className="active-goals" aria-label="Active Goals">
         <h2>Active Goals</h2>
