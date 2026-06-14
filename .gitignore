@@ -1,1 +1,27 @@
 .claude/settings.local.json
+
+# dependencies
+/node_modules
+
+# next.js
+/.next
+/out
+next-env.d.ts
+*.tsbuildinfo
+
+# production
+/build
+
+# env files (keep .env.example)
+.env
+.env*.local
+
+# testing
+/coverage
+/test-results
+/playwright-report
+/playwright/.cache
+
+# misc
+*.log
+.DS_Store
