@@ -173,3 +173,118 @@ a {
   border-radius: 0.5rem;
   background: var(--panel);
 }
+
+/* Slice 2 — Tasks + Gears on a Goal. */
+
+.goal-title {
+  margin: 0 0 0.6rem;
+  font-size: 1.05rem;
+}
+
+.gear-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.gear-heading {
+  margin: 0 0 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.task-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.task-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.task-description {
+  flex: 1 1 auto;
+}
+
+.task-gear select,
+.task-form-gear select {
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.task-edit {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+}
+
+.task-edit input {
+  flex: 1 1 12rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.task-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  border-top: 1px dashed var(--border);
+  padding-top: 0.75rem;
+}
+
+.task-form-description {
+  flex: 1 1 14rem;
+}
+
+.task-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.task-form input {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.link-button.danger {
+  color: #ff6b6b;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
