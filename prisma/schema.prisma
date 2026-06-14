@@ -1,6 +1,7 @@
 // Forever System — Prisma schema.
 // Slice 0 establishes the User. Slice 1 adds the Goal (held in the Vault).
-// Slice 2 adds the Task (carrying a Gear). Later slices add Playbook/Assignment/etc.
+// Slice 2 adds the Task (carrying a Gear). Slice 3 adds rank for Active Goals.
+// Later slices add Playbook/Assignment/etc.
 
 generator client {
   provider = "prisma-client-js"
@@ -35,6 +36,9 @@ model Goal {
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   title     String
   status    GoalStatus @default(vault)
+  // Priority rank among Active Goals (1 = highest). Null when in the Vault.
+  // Ranks are contiguous: activating appends, deactivating compacts the rest.
+  rank      Int?
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   tasks     Task[]

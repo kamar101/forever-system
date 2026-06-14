@@ -1,9 +1,7 @@
 import { groupTasksByGear, isGear, type Gear } from "@/domain/gear";
-import { activateGoalAction } from "./actions";
-import { TaskForm } from "./task-form";
+import { deactivateGoalAction, moveGoalRankDownAction, moveGoalRankUpAction } from "./actions";
 import { TaskItem, type TaskView } from "./task-item";
 
-// Gear 4 is the best day, Gear 1 the worst-day safety net (see CONTEXT.md).
 const GEAR_HINT: Record<Gear, string> = {
   4: "best day",
   3: "",
@@ -11,44 +9,48 @@ const GEAR_HINT: Record<Gear, string> = {
   1: "safety net",
 };
 
-export type GoalCardProps = {
-  goal: { id: string; title: string };
+export type ActiveGoalCardProps = {
+  goal: { id: string; title: string; rank: number };
   tasks: { id: string; description: string; gear: number }[];
-  /** True when this Goal passes canActivateGoal (has ≥1 Gear-1 Task). */
-  canActivate: boolean;
-  /** True when the Active Goals cap has been reached. */
-  atCap: boolean;
+  isFirst: boolean;
+  isLast: boolean;
 };
 
-export function GoalCard({ goal, tasks, canActivate, atCap }: GoalCardProps) {
-  // Defensively narrow the persisted Int to a Gear before grouping.
+export function ActiveGoalCard({ goal, tasks, isFirst, isLast }: ActiveGoalCardProps) {
   const views: TaskView[] = tasks
     .filter((t): t is TaskView => isGear(t.gear))
     .map((t) => ({ id: t.id, description: t.description, gear: t.gear }));
   const groups = groupTasksByGear(views).filter((g) => g.tasks.length > 0);
 
-  const activateDisabled = !canActivate || atCap;
-  const hint = !canActivate
-    ? "Add a Gear 1 task to activate"
-    : atCap
-      ? "Active goal limit reached (5)"
-      : null;
-
   return (
-    <li className="goal-item">
+    <li className="goal-item active-goal-item">
       <div className="goal-header">
+        <span className="goal-rank">#{goal.rank}</span>
         <h3 className="goal-title">{goal.title}</h3>
-        <form action={activateGoalAction}>
+        <div className="goal-rank-controls">
+          <form action={moveGoalRankUpAction}>
+            <input type="hidden" name="goalId" value={goal.id} />
+            <button type="submit" disabled={isFirst} aria-label="Move Up">
+              Move Up
+            </button>
+          </form>
+          <form action={moveGoalRankDownAction}>
+            <input type="hidden" name="goalId" value={goal.id} />
+            <button type="submit" disabled={isLast} aria-label="Move Down">
+              Move Down
+            </button>
+          </form>
+        </div>
+        <form action={deactivateGoalAction}>
           <input type="hidden" name="goalId" value={goal.id} />
-          <button type="submit" className="activate-button" disabled={activateDisabled}>
-            Activate
+          <button type="submit" className="deactivate-button">
+            Deactivate
           </button>
         </form>
       </div>
-      {hint ? <p className="muted activate-hint">{hint}</p> : null}
 
       {groups.length === 0 ? (
-        <p className="muted">No Tasks yet. Add one below.</p>
+        <p className="muted">No Tasks yet.</p>
       ) : (
         <div className="gear-groups">
           {groups.map(({ gear, tasks }) => (
@@ -68,8 +70,6 @@ export function GoalCard({ goal, tasks, canActivate, atCap }: GoalCardProps) {
           ))}
         </div>
       )}
-
-      <TaskForm goalId={goal.id} />
     </li>
   );
 }
