@@ -3,9 +3,23 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { goalSchema } from "@/lib/validation";
+import {
+  goalSchema,
+  taskSchema,
+  taskDescriptionSchema,
+  taskGearSchema,
+} from "@/lib/validation";
 
-export type GoalFormState = { error: string } | { ok: true } | undefined;
+// Shared shape for form-bound server actions driven by useActionState.
+export type FormState = { error: string } | { ok: true } | undefined;
+// Kept for the existing Goal form's import name.
+export type GoalFormState = FormState;
+export type TaskFormState = FormState;
+
+async function currentUserId(): Promise<string | null> {
+  const session = await auth();
+  return session?.user?.id ?? null;
+}
 
 export async function createGoalAction(
   _prev: GoalFormState,
@@ -26,4 +40,108 @@ export async function createGoalAction(
 
   revalidatePath("/dashboard");
   return { ok: true };
+}
+
+// Add a Task (the atomic unit of work) to a Goal, tagged with a Gear (1–4).
+export async function createTaskAction(
+  _prev: TaskFormState,
+  formData: FormData,
+): Promise<TaskFormState> {
+  const userId = await currentUserId();
+  if (!userId) return { error: "You must be signed in." };
+
+  const goalId = formData.get("goalId");
+  if (typeof goalId !== "string" || goalId === "") {
+    return { error: "Missing Goal." };
+  }
+
+  const parsed = taskSchema.safeParse({
+    description: formData.get("description"),
+    gear: formData.get("gear"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid Task." };
+  }
+
+  // Only attach the Task if the Goal belongs to the signed-in user.
+  const goal = await prisma.goal.findFirst({
+    where: { id: goalId, userId },
+    select: { id: true },
+  });
+  if (!goal) return { error: "Goal not found." };
+
+  await prisma.task.create({
+    data: {
+      goalId: goal.id,
+      description: parsed.data.description,
+      gear: parsed.data.gear,
+    },
+  });
+
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+// Edit a Task's description. Scoped to the owner via the Goal relation.
+export async function updateTaskDescriptionAction(
+  _prev: TaskFormState,
+  formData: FormData,
+): Promise<TaskFormState> {
+  const userId = await currentUserId();
+  if (!userId) return { error: "You must be signed in." };
+
+  const taskId = formData.get("taskId");
+  if (typeof taskId !== "string" || taskId === "") {
+    return { error: "Missing Task." };
+  }
+
+  const parsed = taskDescriptionSchema.safeParse({
+    description: formData.get("description"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid Task." };
+  }
+
+  const { count } = await prisma.task.updateMany({
+    where: { id: taskId, goal: { userId } },
+    data: { description: parsed.data.description },
+  });
+  if (count === 0) return { error: "Task not found." };
+
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+// Change a Task's Gear. A plain form action — no state to surface.
+export async function updateTaskGearAction(formData: FormData): Promise<void> {
+  const userId = await currentUserId();
+  if (!userId) return;
+
+  const taskId = formData.get("taskId");
+  if (typeof taskId !== "string" || taskId === "") return;
+
+  const parsed = taskGearSchema.safeParse({ gear: formData.get("gear") });
+  if (!parsed.success) return;
+
+  await prisma.task.updateMany({
+    where: { id: taskId, goal: { userId } },
+    data: { gear: parsed.data.gear },
+  });
+
+  revalidatePath("/dashboard");
+}
+
+// Delete a Task. A plain form action — no state to surface.
+export async function deleteTaskAction(formData: FormData): Promise<void> {
+  const userId = await currentUserId();
+  if (!userId) return;
+
+  const taskId = formData.get("taskId");
+  if (typeof taskId !== "string" || taskId === "") return;
+
+  await prisma.task.deleteMany({
+    where: { id: taskId, goal: { userId } },
+  });
+
+  revalidatePath("/dashboard");
 }

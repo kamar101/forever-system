@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { signOutAction } from "../(auth)/actions";
+import { GoalCard } from "./goal-card";
 import { GoalForm } from "./goal-form";
 
 export default async function DashboardPage() {
@@ -10,10 +11,12 @@ export default async function DashboardPage() {
   // the typed session for scoping.
   if (!session?.user) redirect("/sign-in");
 
-  // The Vault is this user's dormant Goals, newest first.
+  // The Vault is this user's dormant Goals, newest first, each with its Tasks
+  // (oldest first within a Goal so newly added Tasks land at the bottom).
   const vaultGoals = await prisma.goal.findMany({
     where: { userId: session.user.id, status: "vault" },
     orderBy: { createdAt: "desc" },
+    include: { tasks: { orderBy: { createdAt: "asc" } } },
   });
 
   return (
@@ -40,9 +43,7 @@ export default async function DashboardPage() {
         ) : (
           <ul className="goal-list">
             {vaultGoals.map((goal) => (
-              <li key={goal.id} className="goal-item">
-                {goal.title}
-              </li>
+              <GoalCard key={goal.id} goal={goal} tasks={goal.tasks} />
             ))}
           </ul>
         )}

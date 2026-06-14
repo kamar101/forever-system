@@ -1,6 +1,6 @@
 // Forever System — Prisma schema.
 // Slice 0 establishes the User. Slice 1 adds the Goal (held in the Vault).
-// Later slices add Task/Gear/Playbook/Assignment/etc.
+// Slice 2 adds the Task (carrying a Gear). Later slices add Playbook/Assignment/etc.
 
 generator client {
   provider = "prisma-client-js"
@@ -37,6 +37,24 @@ model Goal {
   status    GoalStatus @default(vault)
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
+  tasks     Task[]
 
   @@index([userId])
+}
+
+// A Task is the atomic unit of work on a Goal. Each Task carries a Gear — an
+// effort level from 1 (worst-day safety net) to 4 (best day). A Goal's "Gear N"
+// is the pool of its Tasks tagged at that level. The 1–4 range is enforced in
+// the app layer (see src/domain/gear.ts and src/lib/validation.ts). See
+// CONTEXT.md.
+model Task {
+  id          String   @id @default(cuid())
+  goalId      String
+  goal        Goal     @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  description String
+  gear        Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([goalId])
 }
