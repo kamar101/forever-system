@@ -2,6 +2,7 @@
 // Slice 0 establishes the User. Slice 1 adds the Goal (held in the Vault).
 // Slice 2 adds the Task (carrying a Gear). Slice 3 adds rank for Active Goals.
 // Slice 4 adds Pulse, Assignment, and AssignmentItem (snapshot of Tasks at Pulse time).
+// Slice 6 adds the Day (green when its Assignment snapshot is fully checked in).
 
 generator client {
   provider = "prisma-client-js"
@@ -21,6 +22,7 @@ model User {
   updatedAt    DateTime @updatedAt
   goals        Goal[]
   pulses       Pulse[]
+  days         Day[]
 }
 
 // A Goal is a single long-term pursuit. It lives dormant in the Vault (status
@@ -105,3 +107,25 @@ model AssignmentItem {
   @@index([assignmentId])
 }
 
+// The unit of success the system tracks. A Day is `green` once every item in
+// its Assignment has been completed, otherwise `empty`. Created lazily on the
+// first Check-in (the first time the user ticks an item) — taking a Pulse alone
+// leaves no Day row. Its green status is derived from the Assignment snapshot,
+// so past Days stay accurate even if the underlying Tasks change (ADR-0004).
+enum DayStatus {
+  green
+  empty
+}
+
+model Day {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      DateTime  @db.Date
+  status    DayStatus @default(empty)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([userId, date])
+  @@index([userId])
+}
