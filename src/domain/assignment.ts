@@ -15,24 +15,36 @@ type GoalForAssignment = {
 
 /**
  * Compose an Assignment from the user's declared Capacity and their ranked
- * Active Goals. In the single-Goal case (Slice 4), Capacity maps 1:1 to a
- * Gear and all Tasks at exactly that Gear are included. Multi-Goal breadth
- * selection (Slice 5) will expand `rankedActiveGoals` usage.
+ * Active Goals. Capacity controls both intensity (Gear) and breadth (how many
+ * Goals are in-scope): Good spans all Goals; Worst spans only the top-ranked.
+ * Within each in-breadth Goal, the day's Gear is tried first; if absent, the
+ * nearest lower Gear with Tasks is used; if nothing is at or below the Gear,
+ * that Goal is skipped.
  */
 export function composeAssignment(
   capacity: Capacity,
   rankedActiveGoals: GoalForAssignment[],
 ): AssignmentItem[] {
   const gear = capacityToGear(capacity);
+  const breadth = Math.max(
+    1,
+    Math.floor((rankedActiveGoals.length * gear) / 4),
+  );
   const items: AssignmentItem[] = [];
 
-  for (const goal of rankedActiveGoals) {
+  for (const goal of rankedActiveGoals.slice(0, breadth)) {
+    let effectiveGear = gear;
+    if (!goal.tasks.some((t) => t.gear === gear)) {
+      const lowerGears = goal.tasks.map((t) => t.gear).filter((g) => g < gear);
+      if (lowerGears.length === 0) continue; // nothing at or below day's gear — skip
+      effectiveGear = Math.max(...lowerGears) as Gear;
+    }
     for (const task of goal.tasks) {
-      if (task.gear === gear) {
+      if (task.gear === effectiveGear) {
         items.push({
           goalId: goal.id,
           taskDescription: task.description,
-          gear,
+          gear: effectiveGear,
           completed: false,
         });
       }
