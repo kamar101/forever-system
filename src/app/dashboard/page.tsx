@@ -7,6 +7,7 @@ import { ActiveGoalCard } from "./active-goal-card";
 import { GoalCard } from "./goal-card";
 import { GoalForm } from "./goal-form";
 import { PulseForm } from "./pulse-form";
+import { toggleAssignmentItemAction } from "./actions";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -29,6 +30,13 @@ export default async function DashboardPage() {
       },
     },
   });
+
+  // Today's Day record, if a Check-in has happened (created lazily on the first
+  // ticked item). Drives the green indicator.
+  const todayDay = await prisma.day.findUnique({
+    where: { userId_date: { userId, date: today } },
+  });
+  const isGreen = todayDay?.status === "green";
 
   // Active Goals ordered by priority rank (1 = highest).
   const activeGoals = await prisma.goal.findMany({
@@ -69,6 +77,11 @@ export default async function DashboardPage() {
             <p className="muted">
               Capacity: <strong>{todayPulse.capacity}</strong>
             </p>
+            {isGreen && (
+              <p className="day-green" role="status">
+                Day complete — green!
+              </p>
+            )}
             {todayPulse.assignment.items.length === 0 ? (
               <p className="muted">
                 No Tasks at that Gear — re-Pulse or add Tasks.
@@ -76,7 +89,27 @@ export default async function DashboardPage() {
             ) : (
               <ul className="assignment-items">
                 {todayPulse.assignment.items.map((item) => (
-                  <li key={item.id} className="assignment-item">
+                  <li
+                    key={item.id}
+                    className={
+                      item.completed
+                        ? "assignment-item completed"
+                        : "assignment-item"
+                    }
+                  >
+                    <form action={toggleAssignmentItemAction}>
+                      <input type="hidden" name="itemId" value={item.id} />
+                      <button
+                        type="submit"
+                        className="checkin-toggle"
+                        aria-pressed={item.completed}
+                        aria-label={`${
+                          item.completed ? "Untick" : "Tick"
+                        } ${item.taskDescription}`}
+                      >
+                        {item.completed ? "☑" : "☐"}
+                      </button>
+                    </form>
                     <span>{item.taskDescription}</span>
                     <span className="gear-badge">G{item.gear}</span>
                   </li>
