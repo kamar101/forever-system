@@ -327,3 +327,30 @@ a {
   font-weight: 600;
   color: #2ec27e;
 }
+
+.calendar-grid {
+  display: flex;
+  gap: 3px;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.calendar-week {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.calendar-cell {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  /* Empty is the calm "no contribution" cell — also used for Pulsed-but-incomplete
+     and never-Pulsed Days, which are deliberately indistinguishable. */
+  background: #ebedf0;
+}
+
+.calendar-cell.green {
+  /* Uniform green regardless of Gear; there is no red or yellow state. */
+  background: #2ec27e;
+}

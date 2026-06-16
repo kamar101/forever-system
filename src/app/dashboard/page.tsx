@@ -7,6 +7,8 @@ import { ActiveGoalCard } from "./active-goal-card";
 import { GoalCard } from "./goal-card";
 import { GoalForm } from "./goal-form";
 import { PulseForm } from "./pulse-form";
+import { ContributionCalendar } from "./contribution-calendar";
+import { buildContributionCalendar } from "@/domain/calendar";
 import { toggleAssignmentItemAction } from "./actions";
 
 export default async function DashboardPage() {
@@ -37,6 +39,14 @@ export default async function DashboardPage() {
     where: { userId_date: { userId, date: today } },
   });
   const isGreen = todayDay?.status === "green";
+
+  // Every Day the user has, for the contribution calendar. The grid reduces each
+  // to a binary green/empty cell — Gear and Capacity never reach it (ADR-0004).
+  const days = await prisma.day.findMany({
+    where: { userId },
+    select: { date: true, status: true },
+  });
+  const calendar = buildContributionCalendar(days, { today });
 
   // Active Goals ordered by priority rank (1 = highest).
   const activeGoals = await prisma.goal.findMany({
@@ -131,6 +141,8 @@ export default async function DashboardPage() {
           <PulseForm />
         )}
       </section>
+
+      <ContributionCalendar weeks={calendar} />
 
       <section className="active-goals" aria-label="Active Goals">
         <h2>Active Goals</h2>
