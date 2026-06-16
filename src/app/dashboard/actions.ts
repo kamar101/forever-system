@@ -12,6 +12,7 @@ import {
 } from "@/lib/validation";
 import { canActivateGoal, MAX_ACTIVE_GOALS } from "@/domain/goal";
 import { composeAssignment } from "@/domain/assignment";
+import { isDayGreen } from "@/domain/day";
 
 // Shared shape for form-bound server actions driven by useActionState.
 export type FormState = { error: string } | { ok: true } | undefined;
@@ -286,6 +287,57 @@ export async function takePulseAction(
 
   revalidatePath("/dashboard");
   return { ok: true };
+}
+
+// Check-in: tick (or untick) a single Assignment item as done. Completion lives
+// on the snapshotted item itself (ADR-0004), never on the live Task. After the
+// flip, settle the Day: it is created lazily on this first Check-in and its
+// status is derived from the Assignment snapshot — green iff every item is now
+// completed, otherwise empty.
+export async function toggleAssignmentItemAction(
+  formData: FormData,
+): Promise<void> {
+  const userId = await currentUserId();
+  if (!userId) return;
+
+  const itemId = formData.get("itemId");
+  if (typeof itemId !== "string" || itemId === "") return;
+
+  // Scope to the owner via item → assignment → pulse, and pull the sibling
+  // items + the Pulse's date so we can settle the Day.
+  const item = await prisma.assignmentItem.findFirst({
+    where: { id: itemId, assignment: { pulse: { userId } } },
+    include: {
+      assignment: {
+        include: {
+          pulse: { select: { date: true } },
+          items: { select: { id: true, completed: true } },
+        },
+      },
+    },
+  });
+  if (!item) return;
+
+  const newCompleted = !item.completed;
+  const settledItems = item.assignment.items.map((i) =>
+    i.id === itemId ? { completed: newCompleted } : { completed: i.completed },
+  );
+  const status = isDayGreen(settledItems) ? "green" : "empty";
+  const date = item.assignment.pulse.date;
+
+  await prisma.$transaction([
+    prisma.assignmentItem.update({
+      where: { id: itemId },
+      data: { completed: newCompleted },
+    }),
+    prisma.day.upsert({
+      where: { userId_date: { userId, date } },
+      create: { userId, date, status },
+      update: { status },
+    }),
+  ]);
+
+  revalidatePath("/dashboard");
 }
 
 // Swap this Active Goal's rank with the one ranked immediately below it.
