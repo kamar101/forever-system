@@ -53,3 +53,26 @@ export function composeAssignment(
 
   return items;
 }
+
+/**
+ * Carry completion forward from a previous Assignment into a freshly composed
+ * one after a re-Pulse. Membership is defined entirely by `newItems`: an item
+ * stays completed only if a structurally identical item (same goalId, task
+ * description, and Gear) was completed in `previousItems`. New items start
+ * incomplete; items dropped from the new Assignment simply don't appear.
+ */
+export function carryOverCompletion(
+  newItems: AssignmentItem[],
+  previousItems: AssignmentItem[],
+): AssignmentItem[] {
+  return newItems.map((item) => {
+    const wasCompleted = previousItems.some(
+      (prev) =>
+        prev.completed &&
+        prev.goalId === item.goalId &&
+        prev.taskDescription === item.taskDescription &&
+        prev.gear === item.gear,
+    );
+    return { ...item, completed: wasCompleted };
+  });
+}

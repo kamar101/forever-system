@@ -11,8 +11,10 @@ import {
   pulseSchema,
 } from "@/lib/validation";
 import { canActivateGoal, MAX_ACTIVE_GOALS } from "@/domain/goal";
-import { composeAssignment } from "@/domain/assignment";
+import { composeAssignment, carryOverCompletion } from "@/domain/assignment";
+import { nextPulseSequence } from "@/domain/pulse";
 import { isDayGreen } from "@/domain/day";
+import type { Gear } from "@/domain/gear";
 
 // Shared shape for form-bound server actions driven by useActionState.
 export type FormState = { error: string } | { ok: true } | undefined;
@@ -233,8 +235,11 @@ export async function moveGoalRankUpAction(formData: FormData): Promise<void> {
 }
 
 // Take a Pulse: user declares their Capacity, system composes and persists a
-// snapshotted Assignment for today. At most one Pulse per calendar Day (UTC).
-// Re-Pulsing replaces the existing Assignment for the Day.
+// snapshotted Assignment for today. The initial Pulse is sequence 1; the user
+// may re-Pulse at most once (sequence 2) if the day changes, and the Day always
+// settles against this final Pulse (CONTEXT.md, ADR-0002). A re-Pulse recomposes
+// a fresh Assignment snapshot and carries completion forward for Tasks still in
+// scope (ADR-0004). A second re-Pulse is rejected.
 export async function takePulseAction(
   _prev: FormState,
   formData: FormData,
@@ -248,6 +253,23 @@ export async function takePulseAction(
   }
   const { capacity } = parsed.data;
 
+  // Today's date (UTC date only — timezone is acceptable for MVP).
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+
+  // The Pulse (if any) standing for today, with its current sequence and the
+  // Assignment items we'll carry completion forward from.
+  const existing = await prisma.pulse.findUnique({
+    where: { userId_date: { userId, date: today } },
+    include: { assignment: { include: { items: true } } },
+  });
+
+  // Enforce the re-Pulse cap before doing any work.
+  const sequence = nextPulseSequence(existing?.sequence ?? null);
+  if (sequence === null) {
+    return { error: "You've already re-Pulsed today — the Day settles on it." };
+  }
+
   // Fetch active goals ordered by rank, including their tasks.
   const activeGoals = await prisma.goal.findMany({
     where: { userId, status: "active" },
@@ -255,19 +277,30 @@ export async function takePulseAction(
     include: { tasks: { select: { description: true, gear: true }, orderBy: { createdAt: "asc" } } },
   });
 
-  const items = composeAssignment(capacity, activeGoals);
+  const composed = composeAssignment(capacity, activeGoals);
 
-  // Today's date (UTC date only — timezone is acceptable for MVP).
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
+  // Carry completion forward from the previous Assignment, if this is a re-Pulse.
+  const previousItems =
+    existing?.assignment?.items.map((i) => ({
+      goalId: i.goalId,
+      taskDescription: i.taskDescription,
+      gear: i.gear as Gear,
+      completed: i.completed,
+    })) ?? [];
+  const items = carryOverCompletion(composed, previousItems);
 
-  // Upsert the Pulse for today, then replace its Assignment (ADR-0004).
+  // The Day settles against this final Pulse: re-derive its green status from
+  // the carried-over items.
+  const status = isDayGreen(items) ? "green" : "empty";
+
+  // Replace the Pulse (and cascaded Assignment/items) with the new snapshot, and
+  // re-settle an existing Day row — without creating one (Days are born lazily on
+  // the first Check-in).
   await prisma.$transaction(async (tx) => {
-    // Delete an existing Pulse (and cascaded Assignment/items) for today if any.
     await tx.pulse.deleteMany({ where: { userId, date: today } });
 
     const pulse = await tx.pulse.create({
-      data: { userId, capacity, date: today },
+      data: { userId, capacity, date: today, sequence },
     });
 
     await tx.assignment.create({
@@ -278,10 +311,15 @@ export async function takePulseAction(
             goalId: item.goalId,
             taskDescription: item.taskDescription,
             gear: item.gear,
-            completed: false,
+            completed: item.completed,
           })),
         },
       },
+    });
+
+    await tx.day.updateMany({
+      where: { userId, date: today },
+      data: { status },
     });
   });
 

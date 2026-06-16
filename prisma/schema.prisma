@@ -69,12 +69,17 @@ model Task {
 // The user's self-reported Capacity for a Day, expressed as Good/Average/Bad/Worst.
 // Stored as a plain string; the domain layer owns the type (see src/domain/capacity.ts).
 // Per ADR-0002: at most one Pulse per Day; the Day settles on the final one.
+// Per ADR-0002 / CONTEXT.md, exactly one Pulse row stands per Day. `sequence`
+// distinguishes the initial Pulse (1) from the single allowed re-Pulse (2); a
+// re-Pulse replaces the row, carrying the bumped sequence. The cap is enforced
+// in the app layer (see src/domain/pulse.ts).
 model Pulse {
   id         String     @id @default(cuid())
   userId     String
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   capacity   String
   date       DateTime   @db.Date
+  sequence   Int        @default(1)
   assignment Assignment?
   createdAt  DateTime   @default(now())
 
