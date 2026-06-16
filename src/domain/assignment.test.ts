@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { composeAssignment, type AssignmentItem } from "./assignment";
+import {
+  composeAssignment,
+  carryOverCompletion,
+  type AssignmentItem,
+} from "./assignment";
 import type { Capacity } from "./capacity";
 
 const GOAL_ID = "goal-1";
@@ -156,6 +160,59 @@ describe("composeAssignment — multi-Goal breadth", () => {
     expect(goalIds).toEqual(
       Array.from({ length: expectedBreadth }, (_, i) => `goal-${i + 1}`),
     );
+  });
+});
+
+describe("carryOverCompletion", () => {
+  it("a completed Task that persists into the new Assignment stays completed", () => {
+    const previous: AssignmentItem[] = [
+      { goalId: "goal-1", taskDescription: "Walk 10 min", gear: 1, completed: true },
+    ];
+    const next: AssignmentItem[] = [
+      { goalId: "goal-1", taskDescription: "Walk 10 min", gear: 1, completed: false },
+    ];
+    const carried = carryOverCompletion(next, previous);
+    expect(carried).toEqual([
+      { goalId: "goal-1", taskDescription: "Walk 10 min", gear: 1, completed: true },
+    ]);
+  });
+
+  it("a new Task absent from the previous Assignment starts incomplete, and dropped Tasks disappear", () => {
+    const previous: AssignmentItem[] = [
+      { goalId: "goal-1", taskDescription: "Run 5K", gear: 4, completed: true },
+    ];
+    // New Assignment swaps in a different Task; the old one is gone.
+    const next: AssignmentItem[] = [
+      { goalId: "goal-1", taskDescription: "Jog 20 min", gear: 3, completed: false },
+    ];
+    const carried = carryOverCompletion(next, previous);
+    expect(carried).toEqual([
+      { goalId: "goal-1", taskDescription: "Jog 20 min", gear: 3, completed: false },
+    ]);
+  });
+
+  it("treats the same description at a different Gear as a different Task (no carry-over)", () => {
+    const previous: AssignmentItem[] = [
+      { goalId: "goal-1", taskDescription: "Stretch", gear: 4, completed: true },
+    ];
+    const next: AssignmentItem[] = [
+      { goalId: "goal-1", taskDescription: "Stretch", gear: 2, completed: false },
+    ];
+    const carried = carryOverCompletion(next, previous);
+    expect(carried[0]?.completed).toBe(false);
+  });
+
+  it("carries completion per-item across a mixed multi-Goal Assignment", () => {
+    const previous: AssignmentItem[] = [
+      { goalId: "goal-1", taskDescription: "Read 30 pages", gear: 3, completed: true },
+      { goalId: "goal-2", taskDescription: "Practice vocab", gear: 3, completed: false },
+    ];
+    const next: AssignmentItem[] = [
+      { goalId: "goal-1", taskDescription: "Read 30 pages", gear: 3, completed: false },
+      { goalId: "goal-2", taskDescription: "Practice vocab", gear: 3, completed: false },
+    ];
+    const carried = carryOverCompletion(next, previous);
+    expect(carried.map((i) => i.completed)).toEqual([true, false]);
   });
 });
 

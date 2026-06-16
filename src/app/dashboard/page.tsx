@@ -116,10 +116,16 @@ export default async function DashboardPage() {
                 ))}
               </ul>
             )}
-            <details>
-              <summary className="muted">Re-Pulse</summary>
-              <PulseForm />
-            </details>
+            {todayPulse.sequence < 2 ? (
+              <details>
+                <summary className="muted">Re-Pulse</summary>
+                <PulseForm />
+              </details>
+            ) : (
+              <p className="muted" role="status">
+                You&apos;ve re-Pulsed today — the Day settles on this Assignment.
+              </p>
+            )}
           </div>
         ) : (
           <PulseForm />
